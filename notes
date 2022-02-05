@@ -1,0 +1,92 @@
+lib:
+- like let, but "static": no rewrites are performed on its internals until ??inlined??
+#- when inlined, all variables are prefixed with lib name: otp-real.EAVESDROP
+#- implicitly takes one argument?
+
+link: like apply, but for libs. so when a 
+
+samp: like let, but nothing inside can escape (non-determinstic!)
+- any values containing a samp can themselves only be sampled
+- but let can be turned into samp losslessly: (let a b) <-> (samp a (set b))
+
+sort all sets?
+
+# this doesn't work, name must stay attached
+#(let ots$-real (lib
+
+# TODO: do we need to replace var with some other fn when operating on sampled values?
+
+assume we can figure out variadic functions, perhaps just by desugaring them
+
+# BEGIN GOOD
+
+(lib name x) basically desugars to (let name (fun linkee x)); the only difference is libs can't be mutated: instead, the relevant function has to be inlined into linkee and then it can be rewritten.
+
+# one-time uniform ciphertexts ("one-time secrecy") security definition
+(lib (pow ots$-real Σ)
+  (let ctxt (fun m
+    (samp k (concat Σ "." KeyGen)
+      (samp c (app (var m) (app (var k) (concat Σ "." Enc)))
+        (var c))))
+    (var linkee)))
+
+(lib (pow ots$-rand Σ)
+  (let ctxt (fun m
+    (samp c (concat Σ "." C)
+      c))
+    linkee))
+
+(lib (pow ots$-real (pow Σ 2))
+  (let ctxt (fun m
+    (samp k_1 (concat Σ "." KeyGen)
+      (samp k_2 (concat Σ "." KeyGen)
+        (samp c_1 (app (var m) (app (var k_1) (concat Σ "." Enc)))
+          (samp c_2 (app (var m) (app (var k_2) (concat Σ "." Enc)))
+            (c_1, c_2))))))
+    linkee))
+
+(lib (pow ots$-rand (pow Σ 2))
+  (let ctxt (fun m
+    (samp c_1 (concat Σ "." C)
+      (samp c_2 (concat Σ "." C)
+        (c_1, c_2))))
+    linkee))
+
+# TODO: assert statement?
+(if (= (lib (pow ots$-real Σ)) (lib (pow ots$-rand Σ)))
+# TODO: does the evaluator know it can assume the proposition is true in this branch?
+  (lib (pow ots$-real (pow Σ 2)))
+  false)
+
+# END GOOD
+
+#(lib (pow ots$-rand Σ)
+#    (let ctxt (fun m
+#        (samp k (concat Σ "." C)
+#            (samp c (app m (app k Σ.Enc))
+#                c)))
+#        linkee))
+#
+#(fun λ
+#    (lib otp-real
+#        (let eavesdrop (fun m
+#            (samp k (pow (set "0" "1") λ)
+#                (xor k m)))
+#            linkee))
+#        (lib otp-rand
+#            (let eavesdrop (fun m
+#                (samp c (pow (set "0" "1") λ)
+#                    c))
+#                linkee
+
+(link 
+
+(lib otp-rand
+    (let eavesdrop (fun 
+
+(lib otp-rand (fun eavesdrop
+
+
+(fun EAVESDROP
+
+(lib
