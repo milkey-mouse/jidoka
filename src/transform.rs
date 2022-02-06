@@ -1,5 +1,7 @@
 use crate::sexpr::Expr;
 use once_cell::sync::Lazy;
+use rug::Integer;
+use std::iter;
 
 static DEFINE: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("define"));
 static LET: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("let"));
@@ -32,7 +34,7 @@ enum Desugared {
 
     // if is strictly speaking unnecessary as it too
     // can be desugared, but I think it's worth keeping
-    If(Box<Desugared>, Box<Desugared>, Box<Desugared>), // (if 1 "true" "false")
+    If(Box<Desugared>, Option<Box<Desugared>>, Option<Box<Desugared>>), // (if 1 "true" "false")
 
     String(egg::Symbol), // "hello"
     Char(char),          // '💩'
@@ -64,58 +66,61 @@ for expr in exprs {
     }
 }*/
 
+// TODO: everywhere possible, do Parsed -> AsRef<Parsed>
+
 fn desugar(parsed: Parsed) -> Option<Desugared> {
-    desugar_iter(parsed, iter::empty())
+    desugar_iter(parsed, &mut iter::empty())
 }
 
-fn desugar_lambda(args: &[egg::Symbol], body: Parsed) -> Option<Desugared> {
-    if let [rest @ .., last] = *args.split_last() {
-        Desugared::Lambda(Some(last), Box::new(desugar_lambda(rest, body)?))
-    } else {
-        Desugared::Lambda(None, Box::new(desugar(body)?))
-    }
-}
-
-/*fn desugar_apply(body: Parsed, args: &[Parsed]) -> Option<Desugared> {
-    if let [rest @ .., last] = *args {
-        Some(
-            Desugared::Apply(
-                Box::new( desugar_apply(body, &rest)? ),
-                Some( Box::new(desugar(last)?) )
-            )
-        )
-    } else {
-        Some(
-            Desugared::Apply(
-                Box::new( desugar(body)? ),
-                None
-            )
-        )
-    }
-}*/
+// mod splenda; // desugaring
+// mod ivory;   // maintaining hygiene
 
 fn desugar_iter(parsed: Parsed, rest: &mut impl Iterator<Item = Parsed>) -> Option<Desugared> {
     // TODO: how to keep variable hygiene?
     // what is the lambda-calculus version of Ivory™ soap?
-    match parsed {
+    Some(match parsed {
         // (define var X) (use var) -> ((fun var (use var)) X)
-        Parsed::Define(name, val) => Some(Desugared::Apply(
-            Box::new(Desugared::Lambda(name, desugar_iter(rest.next()?, rest))),
+        Parsed::Define(name, val) => Desugared::Apply(
+            Box::new(Desugared::Lambda(
+                Some(name),
+                Box::new(desugar_iter(rest.next()?, rest)?),
+            )),
             // TODO: change order so we don't consume too many Parsed's if desugar(val) returns None
-            desugar(val).map(Box::new),
-        )),
+            desugar(*val).map(Box::new),
+        ),
         // (let var X (use var)) -> ((fun var (use var)) X)
-        Parsed::Let(name, val, body) => Some(Desugared::Apply(
-            Box::new(Desugared::Lambda(name, desugar(body)?)),
+        Parsed::Let(name, val, body) => Desugared::Apply(
+            Box::new(Desugared::Lambda(Some(name), Box::new(desugar(*body)?))),
             // TODO: change order so we don't consume too many Parsed's if desugar(val) returns None
-            desugar(val).map(Box::new),
-        )),
+            desugar(*val).map(Box::new),
+        ),
+
         // (fun (a b c) (use a b c)) -> (fun c (fun b (fun a (fun () (use a b c)))))
-        Parsed::Lambda(args, body) => Some(Box::new(desugar_lambda(args, body))),
+        // (Vec::from(box) = workaround for https://github.com/rust-lang/rust/issues/59878)
+        Parsed::Lambda(args, body) => Vec::from(args).into_iter().fold(
+            Desugared::Lambda(None, Box::new(desugar(*body)?)),
+            |f, arg| Desugared::Lambda(Some(arg), Box::new(f)),
+        ),
         // (use a b c) -> ((((use ()) a) b) c)
-        Parsed::Apply(body, args) => Some(Box::new(desugar_apply(body, args))),
-        Parsed::String(s) => Some(Desugared::String(s)),
-        Parsed::Char(c) => Some(Desugared::Char(c)),
-        Parsed::Num(n) => Some(Desugared::Num(n)),
-    }
+        Parsed::Apply(body, args) => Vec::from(args).into_iter().fold(
+            Desugared::Apply(Box::new(desugar(*body)?), None),
+            // TODO: don't unwrap desugar(arg), throw a real error.
+            // if we panic here, it means someone has done e.g.
+            // (print (define foo "bar")), where an argument doesn't
+            // evaluate to a value. perhaps we should handle this the
+            // Rust way and reify the unit type/value  so that any lone,
+            // non-value-returning expression actually returns unit ()
+            |f, arg| Desugared::Apply(Box::new(f), Some(Box::new(desugar(arg).unwrap()))),
+        ),
+
+        Parsed::If(cond, if_t, if_f) => Desugared::If(
+            Box::new(desugar(*cond)?),
+            desugar(*if_t).map(Box::new),
+            desugar(*if_f).map(Box::new),
+        ),
+
+        Parsed::String(s) => Desugared::String(s),
+        Parsed::Char(c) => Desugared::Char(c),
+        Parsed::Num(n) => Desugared::Num(n),
+    })
 }
