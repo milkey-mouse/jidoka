@@ -1,4 +1,4 @@
-use egg::Language;
+/// Generic S-expression parser
 use rug::{Complete, Integer};
 use std::{
     fmt,
