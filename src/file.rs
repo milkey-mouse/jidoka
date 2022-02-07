@@ -8,6 +8,7 @@ use std::{
 };
 
 // TODO: handle EINTR
+// TODO: pub enum TakeCharError
 
 pub enum PeekableFile<T: BufRead, const N: usize> {
     Stream {
@@ -22,11 +23,6 @@ pub enum PeekableFile<T: BufRead, const N: usize> {
 }
 
 impl<T: BufRead, const N: usize> PeekableFile<T, N> {
-    // TODO: peek(n: usize) where n <= N
-    // and then have try_take(b'str') -> bool
-    // try_take(impl FnOnce([u8; N]))
-    // take_until()
-
     // factored into separate function from try_take mainly
     // to avoid lots of identical monomorphized versions
     pub fn try_take_slice<R>(
@@ -97,38 +93,6 @@ impl<T: BufRead, const N: usize> PeekableFile<T, N> {
         }
     }
 
-    pub fn try_take<R, const M: usize>(
-        &mut self,
-        f: impl FnOnce(&[u8; M]) -> (R, usize),
-    ) -> io::Result<Option<R>> {
-        /*const _: () =*/
-        assert!(M <= N);
-
-        // TODO: explicitly inline?
-        self.try_take_slice(M, |s| {
-            // TODO: just cast the function pointer?
-            // SAFETY: _try_take only calls f if its
-            // slice parameter is of length at least m
-            let arr = unsafe { &*(s.as_ptr() as *const [u8; M]) };
-            f(arr)
-        })
-    }
-
-    //pub fn take_if<const M: usize>(&mut self, 
-
-    pub fn take_if_eq<const M: usize>(&mut self, b: &[u8; M]) -> io::Result<bool> {
-        println!("want {}", unsafe { std::str::from_utf8_unchecked(b) });
-        Ok(self.try_take(|a| {
-            println!("got {}", unsafe { std::str::from_utf8_unchecked(a) });
-            if a == b { (true, M) } else { (false, 0) }
-        })? == Some(true))
-    }
-
-    pub fn peek<const M: usize>(&mut self) -> io::Result<Option<[u8; M]>> {
-        // TODO: the copy makes this inefficient, don't use this fn
-        self.try_take(|b| (*b, 0))
-    }
-
     pub fn try_take_char<R>(
         &mut self,
         f: impl FnOnce(char) -> Option<R>,
@@ -150,6 +114,7 @@ impl<T: BufRead, const N: usize> PeekableFile<T, N> {
                     Err(e) => (Some(Err(e)), 0),
                 }
             }) {
+                // TODO: real error handling for EOF here
                 Ok(None) => panic!("EOF reading char"),
                 Ok(Some(None)) => Ok(Ok(None)),
                 Ok(Some(Some(Ok(r)))) => Ok(Ok(Some(r))),
@@ -161,26 +126,75 @@ impl<T: BufRead, const N: usize> PeekableFile<T, N> {
         unreachable!("4 bytes should always contain at least one UTF-8 char")
     }
 
-    /*pub fn take_char_if_eq<const M: usize>(&mut self, b: char) -> io::Result<Result<bool, Utf8Error>> {
-        self.try_take_char(|a| a == b).map(|r| r.map(Option::is_some))
-    }*/
+    pub fn try_take<R, const M: usize>(
+        &mut self,
+        f: impl FnOnce(&[u8; M]) -> (R, usize),
+    ) -> io::Result<Option<R>> {
+        /*const _: () =*/
+        assert!(M <= N);
 
-    pub fn consume(&mut self, n: usize) {
-        match self {
-            Self::Stream {
-                stream,
-                peeked: _,
-                peeked_pos,
-            } => {
-                // TODO: this is wrong but does it matter?
-                let new_peeked_pos = min(*peeked_pos + n, N);
-                stream.consume(new_peeked_pos - *peeked_pos);
-                *peeked_pos = new_peeked_pos;
-            }
-            Self::Mmap { map: _, pos } => {
-                *pos += n;
-            }
+        // TODO: explicitly inline?
+        self.try_take_slice(M, |s| {
+            // TODO: just cast the function pointer?
+            // SAFETY: _try_take only calls f if its
+            // slice parameter is of length at least m
+            let arr = unsafe { &*(s.as_ptr() as *const [u8; M]) };
+            f(arr)
+        })
+    }
+
+    pub fn take_slice_if(&mut self, m: usize, f: impl FnOnce(&[u8]) -> bool) -> io::Result<bool> {
+        Ok(self
+            .try_take_slice(m, |s| match f(s) {
+                true => (Some(()), m),
+                false => (None, 0),
+            })?
+            .is_some())
+    }
+
+    pub fn take_char_if(
+        &mut self,
+        f: impl FnOnce(char) -> bool,
+    ) -> io::Result<Result<bool, Utf8Error>> {
+        self.try_take_char(|c| match f(c) {
+            true => Some(()),
+            false => None,
+        })
+        .map(|r| r.map(|o| o.is_some()))
+    }
+
+    pub fn take_if<const M: usize>(
+        &mut self,
+        f: impl FnOnce(&[u8; M]) -> bool,
+    ) -> io::Result<bool> {
+        match self.try_take(|s| match f(s) {
+            true => (true, M),
+            false => (false, 0),
+        }) {
+            Ok(Some(taken)) => Ok(taken),
+            Ok(None) => Ok(false),
+            Err(e) => Err(e),
         }
+    }
+
+    pub fn take_if_eq<const M: usize>(&mut self, b: &[u8; M]) -> io::Result<bool> {
+        /*println!("want {}", unsafe { std::str::from_utf8_unchecked(b) });
+        Ok(self.try_take(|a| {
+            println!("got {}", unsafe { std::str::from_utf8_unchecked(a) });
+            if a == b {
+                (true, M)
+            } else {
+                (false, 0)
+            }
+        })? == Some(true))
+        // TODO*/
+        self.take_if(|a| a == b)
+    }
+
+    // take_char_if_eq(b'c') would be redundant, as we could just do take_if_eq(b"c")
+
+    pub fn take_slice_if_eq(&mut self, b: &[u8]) -> io::Result<bool> {
+        self.take_slice_if(b.len(), |a| a == b)
     }
 }
 

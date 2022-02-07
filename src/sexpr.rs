@@ -86,10 +86,7 @@ impl Expr {
         Ok(if bytes.take_if_eq(b")")? {
             Self::EmptyList
         } else {
-            Self::Pair(Box::new([
-                Self::parse(bytes)?,
-                Self::parse_pair(bytes)?,
-            ]))
+            Self::Pair(Box::new([Self::parse(bytes)?, Self::parse_pair(bytes)?]))
         })
     }
 
@@ -107,10 +104,13 @@ impl Expr {
             // consume a comment spanning from a ; to the next newline
             while let Some(()) =
                 bytes.try_take_char(|c| if dbg!(c) != '\n' { Some(()) } else { None })??
-            {}
+            {
+            }
             // consume the newline itself
             bytes.try_take_char(Option::Some)??;
         }
+
+        bytes.take_if(|[c]| { dbg!(*c as char); false });
 
         if bytes.take_if_eq(b"\\(")? {
             Ok(Self::Pair(Box::new([
@@ -157,15 +157,13 @@ impl Expr {
         } else if bytes.take_if_eq(b"#(")? {
             Ok(Self::Vector({
                 let mut v = Vec::new();
-                while let Some(()) =
-                    bytes.try_take_char(|c| if c.is_whitespace() { Some(()) } else { None })??
-                {
+                while bytes.take_char_if(char::is_whitespace)?? {
                     v.push(Self::parse(bytes)?);
                 }
 
                 // TODO: better way than assert!
                 // expect(bytes, b')')?;
-                assert_eq!(bytes.next().transpose()?, Some(b')')); // consume closing )
+                assert!(bytes.take_if_eq(b")")?);
 
                 v.into_boxed_slice()
             }))
