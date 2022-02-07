@@ -1,4 +1,7 @@
-use std::io::{self};
+use std::{
+    fs::File,
+    io::{self, BufReader},
+};
 
 mod file;
 //mod language;
@@ -6,7 +9,7 @@ mod sexpr;
 mod symbol;
 //mod transform;
 
-fn main() -> Result<(), io::Error> {
+fn main() -> Result<(), sexpr::ParseError> {
     /*let files = ["uniform-ctxts.jidoka", "syntax.jidoka"];
     let exprs = files
         .into_iter()
@@ -22,6 +25,9 @@ fn main() -> Result<(), io::Error> {
     for expr in exprs {
         println!("{}", expr);
     }*/
+    let mut f = BufReader::new(File::open("uniform-ctxts.jidoka")?).into();
+
+    println!("{}", sexpr::Expr::parse(&mut f)?);
 
     Ok(())
 }
