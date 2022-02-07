@@ -92,8 +92,10 @@ name = "jidoka"
 version = "0.1.0"
 dependencies = [
  "egg",
+ "memmap2",
  "once_cell",
  "rug",
+ "thiserror",
 ]
 
 [[package]]
@@ -109,6 +111,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "memmap2"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe3179b85e1fd8b14447cbebadb75e45a1002f541b925f0bfec366d56a81c56d"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

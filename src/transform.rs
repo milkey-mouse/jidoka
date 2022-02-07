@@ -1,44 +1,73 @@
-use crate::sexpr::Expr;
+use crate::{sexpr::Expr, symbol::Symbol};
 use once_cell::sync::Lazy;
 use rug::Integer;
 use std::iter;
 
-static DEFINE: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("define"));
-static LET: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("let"));
-static FUN: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("fun"));
-static IF: Lazy<egg::Symbol> = Lazy::new(|| egg::Symbol::from("if"));
-
 // intermediate form
 enum Parsed {
-    Define(egg::Symbol, Box<Parsed>), // (define name value) (use name)
-    Let(egg::Symbol, Box<Parsed>, Box<Parsed>), // (let name value (use name))
+    Define(Symbol, Box<Parsed>),           // (define name value) (use name)
+    Let(Symbol, Box<Parsed>, Box<Parsed>), // (let name value (use name))
 
-    Lambda(Box<[egg::Symbol]>, Box<Parsed>), // (fun (a b c) (use a b c))
-    Apply(Box<Parsed>, Box<[Parsed]>),       // (use a b c)
+    Lambda(Box<[Symbol]>, Box<Parsed>), // (fun (a b c) (use a b c))
+    Apply(Box<Parsed>, Box<[Parsed]>),  // (use a b c)
 
     If(Box<Parsed>, Box<Parsed>, Box<Parsed>), // (if 1 "true" "false")
 
-    // TODO: should String also use egg::Symbol?
+    // TODO: should String also use Symbol?
     // will it work with string concatenations?
     // will we even need to do string concatenations?
-    String(egg::Symbol), // "hello"
-    Char(char),          // '💩'
-    Num(Integer),        // 1234
+    String(Symbol), // "hello"
+    Char(char),     // '💩'
+    Num(Integer),   // 1234
+}
+
+fn parse(expr: Expr) -> Option<Parsed> {
+    if let Expr::List(l) = expr {
+        Some(match *l {
+            [Expr::Symbol(define), Expr::Symbol(name), value] if define == *DEFINE => {
+                Parsed::Define(name, Box::new(parse(value)?))
+            }
+            [Expr::Symbol(_let), Expr::Symbol(name), value, body] if _let == *LET => {
+                Parsed::Let(name, Box::new(parse(value)?), Box::new(parse(body)?))
+            }
+            [Expr::Symbol(fun), Expr::List(args), body @ ..] if fun == *FUN => {
+                // TODO: error handling
+                let vars = args
+                    .map(|arg| {
+                        if let Expr::Symbol(s) = arg {
+                            Some(s)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Option<Box<[Symbol]>>>()?;
+
+                Parsed::Lambda(vars, Box::new(parse(body)?))
+            }
+        })
+    } else {
+        // TODO: real error
+        None
+    }
 }
 
 enum Desugared {
-    // Option<egg::Symbol>::None, Option<Box<Desugared>>::None = ()
+    // Option<Symbol>::None, Option<Box<Desugared>>::None = ()
     // () is the unit value, for functions which take no argument(s)
-    Lambda(Option<egg::Symbol>, Box<Desugared>), // (fun c (fun b (fun a (fun () (use a b c)))))
+    Lambda(Option<Symbol>, Box<Desugared>), // (fun c (fun b (fun a (fun () (use a b c)))))
     Apply(Box<Desugared>, Option<Box<Desugared>>), // ((((use ()) a) b) c)
 
     // if is strictly speaking unnecessary as it too
     // can be desugared, but I think it's worth keeping
-    If(Box<Desugared>, Option<Box<Desugared>>, Option<Box<Desugared>>), // (if 1 "true" "false")
+    If(
+        Box<Desugared>,
+        Option<Box<Desugared>>,
+        Option<Box<Desugared>>,
+    ), // (if 1 "true" "false")
 
-    String(egg::Symbol), // "hello"
-    Char(char),          // '💩'
-    Num(Integer),        // 1234
+    String(Symbol), // "hello"
+    Char(char),     // '💩'
+    Num(Integer),   // 1234
 }
 
 //fn parse_expr

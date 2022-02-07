@@ -1,206 +1,255 @@
 /// Generic S-expression parser
+// TODO: Get this to the point it can parse R6RS Scheme.
+use crate::{
+    file,
+    symbol::{self, Symbol},
+};
 use rug::{Complete, Integer};
 use std::{
     fmt,
     fs::File,
-    io::{self, BufReader, Read},
+    io::{self, BufRead, BufReader, Read},
     iter::{self, Peekable},
     mem,
     str::{from_utf8, from_utf8_unchecked, FromStr, Utf8Error},
 };
+use thiserror::Error;
 
 pub enum Expr {
-    List(Box<[Expr]>),   // (...)
-    Symbol(egg::Symbol), // hello
-    // TODO: should String also use egg::Symbol?
+    // TODO: should String also use Symbol?
     // will it work with string concatenations?
     // will we even need to do string concatenations?
-    //String(Box<str>),    // "hello"
-    String(egg::Symbol), // "hello"
-    Char(char),          // '0'
-    Num(Integer),        // true
-    Empty,               // empty expression, only used internally
-                         // (TODO: should this just be Option<Expr>?)
-}
-
-/*impl Language for Expr {
-    #[inline(always)]
-    fn matches(&self, other: &Self) -> bool {
-        mem::discriminant(self) == mem::discriminant(other)
-    }
-
-    fn children(&self) -> &[Id] {
-        match self {
-            Self::List(c) => c.as_ref(),
-            _ => &[]
-        }
-    }
-
-    fn children_mut(&mut self) -> &mut [Id] {
-        match self {
-            Self::List(c) => c.as_mut(),
-            _ => &mut []
-        }
-    }
-}*/
-
-// TODO: QuickCheck end-to-end test that print(parse(expr)) == expr for all well-formed expr
-impl fmt::Display for Expr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::List(l) => {
-                write!(f, "(")?;
-                if let Some((first, rest)) = l.split_first() {
-                    write!(f, "{}", first)?;
-                    for elem in rest {
-                        write!(f, " {}", elem)?;
-                    }
-                }
-                write!(f, ")")
-            }
-            Self::Symbol(s) => write!(f, "{}", s),
-            Self::String(s) => write!(f, "\"{}\"", s),
-            Self::Char(c) => write!(f, "\'{}\'", c),
-            Self::Num(c) => write!(f, "{}", c),
-            Self::Empty => Ok(()),
-        }
-    }
+    Boolean(bool), // #t
+    // TODO: extend numeric tower
+    Number(Integer),       // 1234
+    Character(char),       // '💩'
+    String(Symbol),        // "hello"
+    Symbol(Symbol),        // hello
+    Pair(Box<[Expr; 2]>),  // (...)
+    Vector(Box<[Expr]>),   // #("one" '2' 3)
+    ByteVector(Box<[u8]>), // #vu8(1 2 3)
+    EmptyList,             // ()
 }
 
 // TODO: (syntax) error handling
 
-impl Expr {
-    fn eat_char(bytes: &mut impl Iterator<Item = u8>) -> Result<char, Option<Utf8Error>> {
-        let mut s = [0u8; 4];
-        for i in 0..s.len() {
-            s[i] = bytes.next().ok_or(None)?;
-            match from_utf8(&s[..=i]) {
-                Ok(s) => return Ok(s.chars().next().unwrap()),
-                Err(e) if e.error_len() == None => continue,
-                Err(e) => return Err(Some(e)),
-            }
-        }
+// length in bytes of the largest token we want to peek
+const MAX_LOOKAHEAD: usize = b"#vu8(".len();
+type PeekableFile<T> = file::PeekableFile<T, MAX_LOOKAHEAD>;
 
-        // TODO
-        unreachable!();
+#[derive(Error, Debug)]
+pub enum ParseError {
+    #[error("error reading input")]
+    IO(#[from] io::Error),
+    #[error("invalid UTF-8")]
+    Utf8(#[from] Utf8Error),
+}
+
+// this way we can do bytes.next()?
+impl From<Option<u8>> for ParseError {
+    fn from(option: Option<u8>) -> ParseError {
+        assert_eq!(option, None);
+        ParseError::IO(io::Error::from(io::ErrorKind::UnexpectedEof))
+    }
+}
+
+impl Expr {
+    fn eat_char<T: BufRead>(bytes: &mut PeekableFile<T>) -> Result<char, ParseError> {
+        // eat_char needs to see at least 4 chars
+        // to be able to peek any UTF-8 code point
+        const _: () = assert!(MAX_LOOKAHEAD >= 4);
+
+        let peek = bytes.peek()?;
+        match from_utf8(peek) {
+            // there will definitely be a char to unwrap in >=4 bytes
+            // of valid UTF-8 text: any code point fits within our buf
+            Ok(s) => Ok(s.chars().next().unwrap()),
+            Err(e) => match e.valid_up_to() {
+                0 => Err(ParseError::Utf8(e)),
+                // SAFETY: valid_up_to() tells us this string
+                // is valid UTF-8 up to the index it returns
+                i => {
+                    let str = unsafe { from_utf8_unchecked(&peek[..i]) };
+                    if let Some(c) = str.chars().next() {
+                        bytes.consume(i);
+                        Ok(c)
+                    } else {
+                        Err(ParseError::Utf8(e))
+                    }
+                }
+            },
+        }
     }
 
-    fn _parse<I: Iterator<Item = u8>>(bytes: &mut Peekable<I>) -> Self {
+    fn parse<T: BufRead>(bytes: &mut PeekableFile<T>) -> Result<Self, ParseError> {
+        // TODO: would a lookup table be faster than match?
+
         // TODO: we might want to handle non-ASCII whitespace as well
-        while let Some(_) = bytes.next_if(|&c| (c as char).is_ascii_whitespace()) {}
-        match bytes.peek() {
-            None => Expr::Empty, // only used when asked to parse an empty string
-            Some(b'(') => Self::List({
-                assert_eq!(bytes.next(), Some(b'(')); // consume opening (
+        while let Some(_) = bytes.next_if(|c| (c as char).is_whitespace()).transpose()? {}
+
+        match bytes.peek()? {
+            [] => Err(ParseError::IO(io::Error::from(
+                io::ErrorKind::UnexpectedEof,
+            ))),
+            [b'\'', b'(', ..] => {
+                bytes.consume(2);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUOTE),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b'`', b'(', ..] => {
+                bytes.consume(2);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUASIQUOTE),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b',', b'(', ..] => {
+                bytes.consume(2);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNQUOTE),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b',', b'@', b'(', ..] => {
+                bytes.consume(3);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNQUOTE_SPLICING),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b'#', b'\'', b'(', ..] => {
+                bytes.consume(3);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::SYNTAX),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b'#', b'`', b'(', ..] => {
+                bytes.consume(3);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUASISYNTAX),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b'#', b',', b'(', ..] => {
+                bytes.consume(3);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNSYNTAX),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            [b'#', b',', b'@', b'(', ..] => {
+                bytes.consume(4);
+                Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNSYNTAX_SPLICING),
+                    Self::parse(bytes)?,
+                ])))
+            }
+            //[b'(', b')'] =>
+            [b'(', ..] => Ok(Self::Vector({
+                assert_eq!(bytes.next().transpose()?, Some(b'(')); // consume opening (
 
                 let mut v = Vec::with_capacity(2); // average expr has two children(?) TODO
-                while bytes.peek() != Some(&b')') && bytes.peek() != None {
-                    v.push(Self::_parse(bytes));
+                while let Some(_) = bytes.next_if(|c| (c as char).is_whitespace()).transpose()? {
+                    v.push(Self::parse(bytes)?);
                 }
 
-                assert_eq!(bytes.next(), Some(b')')); // consume closing )
+                assert_eq!(bytes.next().transpose()?, Some(b')')); // consume closing )
 
                 v.into_boxed_slice()
-            }),
-            Some(b'"') => Self::String(egg::Symbol::from({
+            })),
+            [b'"', ..] => Ok(Self::String(Symbol::from({
                 let bytes = bytes
                     .skip(1)
-                    .take_while(|&c| c != b'"')
-                    .collect::<Vec<u8>>();
+                    .take_while(|r| r.as_ref().map_or(true, |c| *c != b'"'))
+                    .collect::<Result<Vec<u8>, io::Error>>()?;
 
                 String::from_utf8(bytes).unwrap().into_boxed_str()
-            })),
-            Some(b'\'') => Self::Char({
-                assert_eq!(bytes.next(), Some(b'\'')); // consume opening '
+            }))),
+            [b'\'', ..] => Ok(Self::Character({
+                assert_eq!(bytes.next().transpose()?, Some(b'\'')); // consume opening '
 
                 let c = Self::eat_char(bytes).expect("char literal is not valid UTF-8");
 
-                assert_eq!(bytes.next(), Some(b'\'')); // consume closing '
+                assert_eq!(bytes.next().transpose()?, Some(b'\'')); // consume closing '
 
                 c
-            }),
-            Some(b'+' | b'-' | b'0'..=b'0') => Self::Num({
+            })),
+            [b'+' | b'-' | b'0'..=b'9', ..] => Ok(Self::Number({
                 // TODO: this could theoretically be implemented in a streaming manner
                 let bytes = iter::from_fn(|| {
-                    bytes.next_if(|&c| !(c as char).is_ascii_whitespace() && c != b')')
+                    bytes.next_if(|b| !(b as char).is_ascii_whitespace() && b != b')')
                 })
-                .collect::<Vec<u8>>();
+                .collect::<Result<Vec<u8>, io::Error>>()?;
 
                 Integer::parse(bytes).expect("weird int").complete()
-            }),
-            Some(_) => Self::Symbol(egg::Symbol::from({
-                let bytes = iter::from_fn(|| {
-                    bytes.next_if(|&c| !(c as char).is_ascii_whitespace() && c != b')')
-                })
-                .collect::<Vec<u8>>();
-                String::from_utf8(bytes).unwrap().into_boxed_str()
             })),
-        }
-    }
-
-    pub fn parse(i: impl IntoIterator<Item = u8>) -> Result<Self, (Self, usize)> {
-        // keep track of position in string so we can give a
-        // location if Self::parse throws an error, and give
-        // back the remaining slice of the string that hasn't
-        // been parsed if there are trailing characters
-        let mut bytes_with_indices = i.into_iter().enumerate();
-        let expr = {
-            let bytes = bytes_with_indices.by_ref().map(|(_, v)| v);
-
-            let mut in_comment = false;
-            let mut bytes_without_comments = bytes
-                .filter(move |c| match c {
-                    // filter out comments by ignoring characters
-                    // between a ';' and the next newline after it
-                    b';' => mem::replace(&mut in_comment, true),
-                    b'\n' => mem::replace(&mut in_comment, false),
-                    _ => !in_comment,
+            _ => Ok(Self::Symbol(Symbol::from({
+                let bytes = iter::from_fn(|| {
+                    bytes.next_if(|c| !(c as char).is_ascii_whitespace() && c != b')')
                 })
-                .peekable();
+                .collect::<Result<Vec<u8>, io::Error>>()?;
 
-            // TODO: throw and handle real errors, adding index context
-            Self::_parse(&mut bytes_without_comments)
-        };
-
-        match bytes_with_indices.next() {
-            None => Ok(expr),
-            Some((i, _)) => Err((expr, i)),
+                String::from_utf8(bytes).unwrap().into_boxed_str()
+            }))),
         }
     }
 
-    pub fn parse_all<'a>(i: impl IntoIterator<Item = u8> + 'a) -> impl Iterator<Item = Self> + 'a {
-        let mut i = i.into_iter();
+    /*pub fn parse_all<'a>(i: impl IntoIterator<Item = u8> + 'a) -> impl Iterator<Item = Self> + 'a {
+        todo!()
+        /*let mut i = i.into_iter();
         iter::from_fn(move || match Self::parse(&mut i) {
             Ok(Expr::Empty) => None,
             //Err((Expr::Empty, _)) => None,
             Ok(expr) => Some(expr),
             Err((expr, _)) => Some(expr),
-        })
-    }
-
-    pub fn parse_bytes_with_remainder(b: &[u8]) -> (Self, &[u8]) {
-        match Self::parse(b.iter().copied()) {
-            Ok(expr) => (expr, &[]),
-            Err((expr, i)) => (expr, &b[i..]),
-        }
-    }
-
-    pub fn parse_with_remainder(s: &str) -> (Self, &str) {
-        let (expr, remainder) = Self::parse_bytes_with_remainder(s.as_bytes());
-
-        // SAFETY: the full string is known to be valid UTF-8
-        // (as we called str::as_bytes() to get it), and this
-        // index we're slicing at will be immediately after a
-        // complete ASCII character that we just parsed
-        (expr, unsafe { from_utf8_unchecked(remainder) })
-    }
+        })*/
+    }*/
 }
 
 impl FromStr for Expr {
-    type Err = (Self, usize); // TODO: real errors
+    type Err = ParseError;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, ParseError> {
         // TODO: assert no trailing chars?
-        Self::parse(s.as_bytes().iter().copied())
+        Self::parse(&mut s.as_bytes().into())
+    }
+}
+
+fn print_vector(
+    prefix: &str,
+    v: impl IntoIterator<Item = impl fmt::Display>,
+    f: &mut fmt::Formatter<'_>,
+) -> fmt::Result {
+    let mut v = v.into_iter();
+
+    write!(f, "{}(", prefix)?;
+    if let Some(first) = v.next() {
+        write!(f, "{}", first)?;
+        for elem in v {
+            write!(f, "{}", elem)?;
+        }
+    }
+    write!(f, ")")
+}
+
+// TODO: QuickCheck end-to-end test that print(parse(expr)) == expr for all well-formed expr
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Boolean(true) => write!(f, "#t"),
+            Self::Boolean(false) => write!(f, "#f"),
+            Self::Number(c) => write!(f, "{}", c),
+            Self::Character(c) => write!(f, "\'{}\'", c),
+            Self::String(s) => write!(f, "\"{}\"", s),
+            Self::Symbol(s) => write!(f, "{}", s),
+            // TODO: "re-sugar" lists when printing
+            Self::Pair(b) => write!(f, "({} {})", b[0], b[1]),
+            Self::Vector(v) => print_vector("#", v.into_iter(), f),
+            Self::ByteVector(bv) => print_vector("#vu8", bv.into_iter(), f),
+            Self::EmptyList => write!(f, "()"),
+        }
     }
 }

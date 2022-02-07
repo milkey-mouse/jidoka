@@ -1,0 +1,52 @@
+/*use egg::{rewrite, Rewrite, Runner, SymbolLang};
+
+define_language! {
+    enum Lambda {
+        Bool(bool),
+        Num(i32),
+
+        "←"  = Sample([Id; 2]),
+        ":=" = Assign([Id; 2]),
+        "⊕"  = Xor([Id; 2]),
+        "^"  = Pow([Id; 2]),
+        "‖"  = Concat([Id; 2]),
+
+        "var" = Var(Id),
+
+        "+" = Add([Id; 2]),
+        "=" = Eq([Id; 2]),
+
+        "app" = App([Id; 2]),
+        "lam" = Lambda([Id; 2]),
+        "let" = Let([Id; 3]),
+        "fix" = Fix([Id; 2]),
+
+        "if" = If([Id; 3]),
+
+        Symbol(egg::Symbol),
+    }
+}*/
+
+fn main() {
+    /*let rules: &[Rewrite<SymbolLang, ()>] = &[
+        rewrite!("div-one"; "?x" => "(/ ?x 1)"),
+        rewrite!("unsafe-invert-division"; "(/ ?a ?b)" => "(/ 1 (/ ?b ?a))"),
+        rewrite!("simplify-frac"; "(/ ?a (/ ?b ?c))" => "(/ (* ?a ?c) (* (/ ?b ?c) ?c))"),
+        rewrite!("cancel-denominator"; "(* (/ ?a ?b) ?b)" => "?a"),
+        rewrite!("times-zero"; "(* ?a 0)" => "0"),
+    ];
+
+    let start = "(/ (* (/ 2 3) (/ 3 2)) 1)".parse().unwrap();
+    let end = "1".parse().unwrap();
+    let mut runner = Runner::default()
+        .with_explanations_enabled()
+        .with_expr(&start)
+        .run(rules);
+
+    println!(
+        "{}",
+        runner.explain_equivalence(&start, &end).get_flat_string()
+    );*/
+
+    
+}
