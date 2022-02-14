@@ -6,9 +6,21 @@ use std::{
     io::{self, BufRead, BufReader, ErrorKind},
     str::Utf8Error,
 };
+use thiserror::Error;
 
 // TODO: handle EINTR
 // TODO: pub enum TakeCharError
+
+#[derive(Error, Debug)]
+pub enum TakeCharError {
+    #[error("error reading input")]
+    IO(#[from] io::Error),
+    #[error("invalid UTF-8")]
+    Utf8(#[from] Utf8Error),
+    // TODO: ParseError::IO(io::Error::from(io::ErrorKind::UnexpectedEof)) or custom variant?
+    #[error("unexpected EOF")]
+    UnexpectedEOF, // TODO: necessary?
+}
 
 pub enum PeekableFile<T: BufRead, const N: usize> {
     Stream {
@@ -23,6 +35,76 @@ pub enum PeekableFile<T: BufRead, const N: usize> {
 }
 
 impl<T: BufRead, const N: usize> PeekableFile<T, N> {
+    pub fn take_while<R>(
+        &mut self,
+        mut should_take: impl FnMut(u8) -> bool,
+        // TODO: impl FnMut(Cow<u8>) so no copy on new vec case?
+        mut map_taken: impl FnMut(&[u8]) -> R,
+    ) -> io::Result<Option<R>> {
+        match self {
+            Self::Stream {
+                stream,
+                peeked,
+                peeked_pos,
+            } => {
+                let mut v = Vec::new();
+                if *peeked_pos != N {
+                    if let Some(len) = peeked[*peeked_pos..].iter().position(|b| !should_take(*b)) {
+                        let start = *peeked_pos;
+                        *peeked_pos += len;
+                        return Ok(Some(map_taken(&peeked[start..*peeked_pos])));
+                    } else {
+                        v.extend_from_slice(&peeked[*peeked_pos..]);
+                        *peeked_pos = N;
+                    }
+                } else {
+                    // peeked_pos = N, so we don't need to worry about prepending peeked bytes
+                    let buf = stream.fill_buf()?;
+                    if buf.is_empty() {
+                        // end of file
+                        return Ok(None);
+                    } else if let Some(len) = buf.iter().position(|b| !should_take(*b)) {
+                        // let's optimistically assume we probably only need
+                        // one buffer fill and thus can call map_taken directly
+                        // on a slice from buf
+                        let ret = map_taken(&buf[..len]);
+                        stream.consume(len);
+                        return Ok(Some(ret));
+                    } else {
+                        v.extend_from_slice(buf);
+                        let len = buf.len();
+                        stream.consume(len);
+                    }
+                }
+
+                loop {
+                    let buf = stream.fill_buf()?;
+                    if buf.is_empty() {
+                        // end of file
+                        return Ok(None);
+                    } else if let Some(len) = buf.iter().position(|b| !should_take(*b)) {
+                        v.extend_from_slice(&buf[..len]);
+                        stream.consume(len);
+                        return Ok(Some(map_taken(&v)));
+                    } else {
+                        v.extend_from_slice(buf);
+                        let len = buf.len();
+                        stream.consume(len);
+                    }
+                }
+            }
+            Self::Mmap { map, pos } => match map[*pos..].iter().position(|b| !should_take(*b)) {
+                Some(len) => {
+                    let start = *pos;
+                    *pos += len;
+
+                    Ok(Some(map_taken(&map[start..*pos])))
+                }
+                None => Ok(None),
+            },
+        }
+    }
+
     // factored into separate function from try_take mainly
     // to avoid lots of identical monomorphized versions
     pub fn try_take_slice<R>(
@@ -60,7 +142,7 @@ impl<T: BufRead, const N: usize> PeekableFile<T, N> {
                 let mut written = N - *peeked_pos;
                 while written < N {
                     let buf = stream.fill_buf()?;
-                    if buf.len() == 0 {
+                    if buf.is_empty() {
                         // end of file
                         break;
                     }

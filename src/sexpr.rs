@@ -110,7 +110,10 @@ impl Expr {
             bytes.try_take_char(Option::Some)??;
         }
 
-        bytes.take_if(|[c]| { dbg!(*c as char); false });
+        bytes.take_if(|[c]| {
+            dbg!(*c as char);
+            false
+        })?;
 
         if bytes.take_if_eq(b"\\(")? {
             Ok(Self::Pair(Box::new([
