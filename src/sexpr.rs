@@ -1,9 +1,7 @@
 /// Generic S-expression parser
-// TODO: Get this to the point it can parse R6RS Scheme.
-use crate::{
-    file,
-    symbol::{self, Symbol},
-};
+// TODO: Get this to the point it can parse R7RS-small Scheme.
+use crate::symbol::{self, Symbol};
+use lighter::lighter;
 use rug::{Complete, Integer};
 use std::{
     fmt,
@@ -32,10 +30,6 @@ pub enum Expr {
 }
 
 // TODO: (syntax) error handling
-
-// length in bytes of the largest token we want to peek
-const MAX_LOOKAHEAD: usize = b"#vu8(".len();
-type PeekableFile<T> = file::PeekableFile<T, MAX_LOOKAHEAD>;
 
 #[derive(Error, Debug)]
 pub enum ParseError {
@@ -82,100 +76,188 @@ impl From<Option<u8>> for ParseError {
 }*/
 
 impl Expr {
-    pub fn parse_pair<T: BufRead>(bytes: &mut PeekableFile<T>) -> Result<Self, ParseError> {
-        Ok(if bytes.take_if_eq(b")")? {
+    fn parse_block_comment<I: Iterator<Item = u8>>(bytes: &mut Peekable<I>) {
+        loop {
+            lighter! { match bytes.by_ref() {
+                Prefix("|#") => return,
+                // block comments may be nested
+                Prefix("#|") => Self::parse_block_comment(bytes),
+                // consume a character
+                // TODO: throw error if EOF
+                _ => { let _ = bytes.next(); },
+            }}
+        }
+    }
+
+    fn parse_pair<I: Iterator<Item = u8>>(bytes: &mut Peekable<I>) -> Result<Self, ParseError> {
+        Ok(if bytes.next_if_eq(&b')').is_some() {
             Self::EmptyList
         } else {
             Self::Pair(Box::new([Self::parse(bytes)?, Self::parse_pair(bytes)?]))
         })
     }
 
-    pub fn parse<T: BufRead>(bytes: &mut PeekableFile<T>) -> Result<Self, ParseError> {
-        // TODO: would a lookup table be faster than match?
-
-        // TODO: we might want to handle non-ASCII whitespace as well
-        while let Some(()) =
-            bytes.try_take_char(|c| if c.is_whitespace() { Some(()) } else { None })??
-        {}
-
-        // yeet comments
-        if bytes.take_if_eq(b";")? {
-            // TODO: there are other newline chars we should handle
-            // consume a comment spanning from a ; to the next newline
-            while let Some(()) =
-                bytes.try_take_char(|c| if dbg!(c) != '\n' { Some(()) } else { None })??
-            {
+    pub fn parse<I: Iterator<Item = u8>>(bytes: &mut Peekable<I>) -> Result<Self, ParseError> {
+        // ignore whitespace and single-line comments
+        /*while let Some(()) = bytes.try_take_char(|c| {
+            if c.is_whitespace() || c == '\n' {
+                Some(())
+            } else {
+                None
             }
-            // consume the newline itself
-            bytes.try_take_char(Option::Some)??;
-        }
+        })?? {} TODO comments*/
 
-        bytes.take_if(|[c]| {
+        // TODO: ignore multiline comments
+
+        // TODO: remove this line
+        /*bytes.take_if(|[c]| {
             dbg!(*c as char);
             false
-        })?;
+        })?;*/
 
-        if bytes.take_if_eq(b"\\(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::QUOTE),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"`(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::QUASIQUOTE),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b",(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::UNQUOTE),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b",@(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::UNQUOTE_SPLICING),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"#\'(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::SYNTAX),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"#`(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::QUASISYNTAX),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"#,(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::UNSYNTAX),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"#,@(")? {
-            Ok(Self::Pair(Box::new([
-                Self::Symbol(*symbol::UNSYNTAX_SPLICING),
-                Self::parse(bytes)?,
-            ])))
-        } else if bytes.take_if_eq(b"(")? {
-            Self::parse_pair(bytes)
-        } else if bytes.take_if_eq(b"#(")? {
-            Ok(Self::Vector({
-                let mut v = Vec::new();
-                while bytes.take_char_if(char::is_whitespace)?? {
-                    v.push(Self::parse(bytes)?);
+        loop {
+            return lighter! { match bytes.by_ref() {
+                // ignore whitespace
+                // (match all characters in the Unicode White_Space class)
+                Prefix('\u{0009}') | Prefix('\u{000a}') | Prefix('\u{000b}') |
+                Prefix('\u{000c}') | Prefix('\u{000d}') | Prefix('\u{0020}') |
+                Prefix('\u{0085}') | Prefix('\u{00a0}') | Prefix('\u{1680}') |
+                Prefix('\u{2000}') | Prefix('\u{2001}') | Prefix('\u{2002}') |
+                Prefix('\u{2003}') | Prefix('\u{2004}') | Prefix('\u{2005}') |
+                Prefix('\u{2006}') | Prefix('\u{2007}') | Prefix('\u{2008}') |
+                Prefix('\u{2009}') | Prefix('\u{200a}') | Prefix('\u{2028}') |
+                Prefix('\u{2029}') | Prefix('\u{202f}') | Prefix('\u{205f}') |
+                Prefix('\u{3000}') => continue,
+
+                // single-line comments
+                Prefix(';') => {
+                    // ignore all remaining characters in the line
+                    loop {
+                        lighter! { match bytes.by_ref() {
+                            Prefix('\n') | Prefix('\r') => break,
+                            _ => continue,
+                        }}
+                    }
+                    continue
                 }
 
-                // TODO: better way than assert!
-                // expect(bytes, b')')?;
-                assert!(bytes.take_if_eq(b")")?);
+                // block comments (may be nested)
+                Prefix("#|") => {
+                    Self::parse_block_comment(bytes);
+                    continue
+                }
 
-                v.into_boxed_slice()
-            }))
-        } else if let Some(c) = bytes.try_take_char(Option::Some)?? {
-            // TODO: populate expected characters
-            // should this whole if chain be a macro?
-            Err(ParseError::UnexpectedCharacter(c, &[]))
-        } else {
-            Err(ParseError::UnexpectedEOF)
+                // special forms
+                Prefix("\\(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUOTE),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix("`(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUASIQUOTE),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix(",(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNQUOTE),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix(",@(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNQUOTE_SPLICING),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix("#'(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::SYNTAX),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix("#`(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::QUASISYNTAX),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix("#,(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNSYNTAX),
+                    Self::parse(bytes)?,
+                ]))),
+                Prefix("#,@(") => Ok(Self::Pair(Box::new([
+                    Self::Symbol(*symbol::UNSYNTAX_SPLICING),
+                    Self::parse(bytes)?,
+                ]))),
+
+                // pairs or cons lists
+                Prefix('(') => Self::parse_pair(bytes),
+
+                // vectors: #("one" '2' 3)
+                Prefix("#(") => Ok(Self::Vector({
+                    let mut v = Vec::new();
+
+                    while bytes.next_if_eq(&b')').is_none() {
+                        v.push(Self::parse(bytes)?);
+                        // TODO: expect at least one whitespace character between items?
+                    }
+
+                    v.into_boxed_slice()
+                })),
+
+                // booleans
+                Prefix("#t") => Ok(Self::Boolean(true)),
+                Prefix("#f") => Ok(Self::Boolean(false)),
+
+                // strings
+                Prefix('"') => Ok(Self::String({
+                    let s = bytes.take_while(|c| *c != b'"').collect::<Vec<u8>>();
+                    Symbol::from(std::str::from_utf8(&s).expect("invalid UTF-8"))  // TODO: throw real "invalid UTF-8" error
+                })),
+
+                // symbols/identifiers
+                Prefix('|') => Ok(Self::Symbol({
+                    let s = bytes.take_while(|c| *c != b'|').collect::<Vec<u8>>();
+                    Symbol::from(std::str::from_utf8(&s).expect("invalid UTF-8"))  // TODO: throw real "invalid UTF-8" error
+                })),
+                Prefix(peeked) => {
+                    let mut buf = peeked.into_iter().collect::<Vec<u8>>();
+
+                    // in case the match statement stopped iterating in
+                    // the middle of a multi-byte character, consume
+                    // any remaining bytes belonging to that character
+                    buf.extend(iter::from_fn(|| bytes.next_if(|b| *b >= 128)));
+
+                    // add characters to our buf until we see either whitespace
+                    // or a close-paren
+                    // TODO: this is inelegant
+                    while bytes.peek() != Some(&b')') {
+                        lighter! {
+                            match bytes.by_ref() {
+                                // TODO: use the real algorithm (unicode xid?
+                                // what do real lisps do?) for finding the end/
+                                // span of an identifier
+                                Prefix('\u{0009}') | Prefix('\u{000a}') | Prefix('\u{000b}') |
+                                Prefix('\u{000c}') | Prefix('\u{000d}') | Prefix('\u{0020}') |
+                                Prefix('\u{0085}') | Prefix('\u{00a0}') | Prefix('\u{1680}') |
+                                Prefix('\u{2000}') | Prefix('\u{2001}') | Prefix('\u{2002}') |
+                                Prefix('\u{2003}') | Prefix('\u{2004}') | Prefix('\u{2005}') |
+                                Prefix('\u{2006}') | Prefix('\u{2007}') | Prefix('\u{2008}') |
+                                Prefix('\u{2009}') | Prefix('\u{200a}') | Prefix('\u{2028}') |
+                                Prefix('\u{2029}') | Prefix('\u{202f}') | Prefix('\u{205f}') |
+                                Prefix('\u{3000}') => break,
+                                Prefix(s) => buf.extend(s),
+                        }}
+                    }
+
+                    if buf.is_empty() {
+                        Err(ParseError::UnexpectedEOF)
+                    } else {
+                        Ok(Self::Symbol(Symbol::from(dbg!(std::str::from_utf8(&buf).expect("invalid UTF-8"))))) // TODO: real error
+                    }
+                }
+
+                c => panic!("unexpected character '{}' before {}", std::str::from_utf8(&c).unwrap(), std::str::from_utf8(&bytes.collect::<Vec<u8>>()).unwrap()),
+                //} else if let Some(s) = bytes.take_while
+                     /*} else if let Some(c) = bytes.try_take_char(Option::Some)?? {
+                         // TODO: populate expected characters
+                         // should this whole if chain be a macro?
+                         Err(ParseError::UnexpectedCharacter(c, &[]))
+                     } else {
+                         Err(ParseError::UnexpectedEOF)
+                     }*/
+            }};
         }
 
         /*    //[b'(', b')'] =>
@@ -233,7 +315,7 @@ impl FromStr for Expr {
 
     fn from_str(s: &str) -> Result<Self, ParseError> {
         // TODO: assert no trailing chars?
-        Self::parse(&mut s.as_bytes().into())
+        Self::parse(&mut s.bytes().peekable())
     }
 }
 

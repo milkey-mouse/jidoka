@@ -1,12 +1,13 @@
 use std::{
     fs::File,
-    io::{self, BufReader},
+    io::{self, BufReader, Read},
 };
 
-mod file;
+//mod file;
 //mod language;
 mod sexpr;
 mod symbol;
+mod utf8;
 //mod transform;
 
 fn main() -> Result<(), sexpr::ParseError> {
@@ -25,7 +26,10 @@ fn main() -> Result<(), sexpr::ParseError> {
     for expr in exprs {
         println!("{}", expr);
     }*/
-    let mut f = BufReader::new(File::open("uniform-ctxts.jidoka")?).into();
+    let mut f = BufReader::new(File::open("uniform-ctxts.jidoka")?)
+        .bytes()
+        .map(Result::unwrap) // TODO
+        .peekable();
 
     println!("{}", sexpr::Expr::parse(&mut f)?);
 
