@@ -119,6 +119,7 @@ dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
+ "replace_with",
  "syn",
 ]
 
@@ -173,6 +174,12 @@ checksum = "864d3e96a899863136fc6e99f3d7cae289dafe43bf2c5ac19b70df7210c0a145"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "replace_with"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a8614ee435691de62bcffcf4a66d91b3594bf1428a5722e79103249a095690"
 
 [[package]]
 name = "rug"

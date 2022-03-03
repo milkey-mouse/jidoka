@@ -244,7 +244,7 @@ impl Expr {
                     if buf.is_empty() {
                         Err(ParseError::UnexpectedEOF)
                     } else {
-                        Ok(Self::Symbol(Symbol::from(dbg!(std::str::from_utf8(&buf).expect("invalid UTF-8"))))) // TODO: real error
+                        Ok(Self::Symbol(Symbol::from(std::str::from_utf8(&buf).expect("invalid UTF-8")))) // TODO: real error
                     }
                 }
 
