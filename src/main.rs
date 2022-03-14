@@ -7,8 +7,8 @@ use std::{
 //mod language;
 mod sexpr;
 mod symbol;
-mod utf8;
-//mod transform;
+//mod utf8;
+mod transform;
 
 fn main() -> Result<(), sexpr::ParseError> {
     /*let files = ["uniform-ctxts.jidoka", "syntax.jidoka"];
@@ -28,10 +28,9 @@ fn main() -> Result<(), sexpr::ParseError> {
     }*/
     let mut f = BufReader::new(File::open("uniform-ctxts.jidoka")?)
         .bytes()
-        .map(Result::unwrap) // TODO
         .peekable();
 
-    println!("{}", sexpr::Expr::parse(&mut f)?);
+    println!("{}", transform::parse(sexpr::Expr::parse(&mut f)?));
 
     Ok(())
 }

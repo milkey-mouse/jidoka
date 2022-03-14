@@ -1,6 +1,5 @@
 // adapted from the Rust standard library:
 // https://github.com/rust-lang/rust/blob/9d1b2106e23b1abd32fce1f17267604a5102f57a/library/core/src/str/validations.rs
-// TODO: add note to README.md/LICENSE about this Apache/MIT-licensed code
 
 /// Returns the initial codepoint accumulator for the first byte.
 /// The first byte is special, only want bottom 5 bits for width 2, 4 bits
@@ -25,7 +24,7 @@ const fn utf8_is_cont_byte(byte: u8) -> bool {
 
 /// Reads the next code point out of a byte iterator (assuming a
 /// UTF-8-like encoding).
-#[inline]
+// TODO #[inline]
 pub fn next_code_point<'a, I: Iterator<Item = &'a u8>>(bytes: &mut I) -> Option<char> {
     // Decode UTF-8
     let x = *bytes.next()?;

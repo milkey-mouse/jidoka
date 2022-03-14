@@ -4,50 +4,21 @@ use rug::Integer;
 use std::iter;
 
 // intermediate form
-#[define(Debug)]
 enum Parsed {
-    //Define(Symbol, Box<Parsed>),           // (define name value) (use name)
-    //Let(Symbol, Box<Parsed>, Box<Parsed>), // (let name value (use name))
+    Define(Symbol, Box<Parsed>),           // (define name value) (use name)
+    Let(Symbol, Box<Parsed>, Box<Parsed>), // (let name value (use name))
 
-    Lambda(Symbol, Box<Parsed>),               // (fun a (use (+ a 1)))
-                                               // TODO (fun (a b c) (use a b c))
-    Apply(Symbol, Box<Parsed>),                // (app a 1)
-                                               // TODO (use a b c)
+    Lambda(Box<[Symbol]>, Box<Parsed>), // (fun (a b c) (use a b c))
+    Apply(Box<Parsed>, Box<[Parsed]>),  // (use a b c)
 
     If(Box<Parsed>, Box<Parsed>, Box<Parsed>), // (if 1 "true" "false")
 
-    Boolean(bool),         // #t #f
-    Number(Integer),       // +1234
-    Character(char),       // '💩'
-    String(Symbol),        // "hello"
-    Symbol(Symbol),        // hello
-}
-
-    //ByteVector(Box<[u8]>), // #vu8(1 2 3)
-    EmptyList,             // ()
-
-fn desugar(expr: Expr) -> Parsed {
-    match expr {
-        Expr::Character(c) => Parsed::Character(c),
-        Expr::String(s) => Parsed::String(s),
-        
-        Expr::Symbol(s) if s == symbol::DEFINE => {
-            todo!()
-        }
-        Expr::Symbol(s) if s == symbol::LET => {
-            todo!()
-        }
-        Expr::Symbol(s) if s == symbol::TRUE => Parsed::Boolean(true),
-        Expr::Symbol(s) if s == symbol::FALSE => Parsed::Boolean(false),
-        Expr::Symbol(s) => match Integer::parse(s) {
-            Ok(p) => Parsed::Number(p.complete()),
-            Err(_) => Parsed::Symbol(s),
-        }
-    }
-    Pair(Box<[Expr; 2]>),  // (...)
-    Vector(Box<[Expr]>),   // #("one" '2' 3)
-    //ByteVector(Box<[u8]>), // #vu8(1 2 3)
-    EmptyList,             // ()
+    // TODO: should String also use Symbol?
+    // will it work with string concatenations?
+    // will we even need to do string concatenations?
+    String(Symbol), // "hello"
+    Char(char),     // '💩'
+    Num(Integer),   // 1234
 }
 
 fn parse(expr: Expr) -> Option<Parsed> {
