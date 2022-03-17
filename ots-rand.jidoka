@@ -1,0 +1,4 @@
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (let ctxt (lam m
+    (samp (var Σ.C)))
+    (app ctxt (var linkee)))))))

@@ -90,3 +90,124 @@ assume we can figure out variadic functions, perhaps just by desugaring them
 (fun EAVESDROP
 
 (lib
+
+completed rewrite:
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (let ctxt (lam m
+    (cons
+      (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))
+      (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+  (app ctxt (var linkee)))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (Rewrite=> let-app (app
+    (let ctxt (lam m
+      (cons
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      ctxt)
+    (let ctxt (lam m
+      (cons
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      (var linkee))))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (app
+    (let ctxt (lam m
+      (cons
+        (Rewrite=> ots$ (samp (var Σ.C)))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      ctxt)
+    (let ctxt (lam m
+      (cons
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      (var linkee)))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (app
+    (let ctxt (lam m
+      (cons
+        (samp (var Σ.C))
+        (Rewrite=> ots$ (samp (var Σ.C)))))
+      ctxt)
+    (let ctxt (lam m
+      (cons
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      (var linkee)))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (app
+    (let ctxt (lam m
+      (cons
+        (samp (var Σ.C))
+        (samp (var Σ.C))))
+      ctxt)
+    (let ctxt (lam m
+      (cons
+        (Rewrite=> ots$ (samp (var Σ.C)))
+        (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))))
+      (var linkee)))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (app
+    (let ctxt (lam m
+      (cons
+        (samp (var Σ.C))
+        (samp (var Σ.C))))
+      ctxt)
+    (let ctxt (lam m
+      (cons
+        (samp (var Σ.C))
+        (Rewrite=> ots$ (samp (var Σ.C)))))
+      (var linkee)))))))
+
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc
+  (Rewrite<= let-app
+    (let ctxt (lam m
+      (cons
+        (samp (var Σ.C))
+        (samp (var Σ.C))))
+      (app ctxt (var linkee))))))))Runner report
+=============
+  Stop reason: Saturated
+  Iterations: 4
+  Egraph size: 27 nodes, 22 classes, 38 memo
+  Rebuilds: 8
+  Total time: 0.007628414
+    Search:  (0.12) 0.0009388490000000001
+    Apply:   (0.09) 0.000651763
+    Rebuild: (0.79) 0.006030336000000001
+
+Libraries are interchangeable.
+Library egraph extraction: 20:(lam 0:linkee, 19:(lam 1:Σ.C, 18:(lam 2:Σ.KeyGen, 17:(lam 3:Σ.Enc, {16:(app {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),13:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),<13>} 4:ctxt,),} {14:(var 0:linkee,),14:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),13:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),<13>} 4:ctxt,),} {14:(var 0:linkee,),<14>}),}),16:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),13:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),<13>} 4:ctxt,),} 15:(app 4:ctxt, {14:(var 0:linkee,),14:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),13:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),<13>} 4:ctxt,),} {14:(var 0:linkee,),<14>}),}),),16:(let 5:m, {14:(var 0:linkee,),14:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),13:(let 4:ctxt, {13:(lam 5:m, {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),<13>} 4:ctxt,),} {14:(var 0:linkee,),<14>}),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 21:(var 1:Σ.C,),),}),}),),),),
+
+Explanation: (lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (let ctxt (lam m (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))) (app ctxt (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (Rewrite=> let-app (app (let ctxt (lam m (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))) ctxt) (let ctxt (lam m (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))) (var linkee))))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (Rewrite=> ots$ (samp (var Σ.C)))) ctxt) (let ctxt (lam m (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc))))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (samp (var Σ.C))) ctxt) (let ctxt (lam m (Rewrite=> ots$ (samp (var Σ.C)))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (Rewrite<= let-app (let ctxt (lam m (samp (var Σ.C))) (app ctxt (var linkee))))))))
+Runner report
+=============
+  Stop reason: Saturated
+  Iterations: 5
+  Egraph size: 30 nodes, 24 classes, 42 memo
+  Rebuilds: 9
+  Total time: 0.014463501999999998
+    Search:  (0.09) 0.001245242
+    Apply:   (0.08) 0.001131418
+    Rebuild: (0.83) 0.012075411000000001
+
+Libraries are interchangeable.
+Library egraph extraction: 21:(lam 0:linkee, 20:(lam 1:Σ.C, 19:(lam 2:Σ.KeyGen, 18:(lam 3:Σ.Enc, {17:(app {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),15:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),<15>}),}),17:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} 16:(app 4:ctxt, {15:(var 0:linkee,),15:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),<15>}),}),),17:(let 5:m, {15:(var 0:linkee,),15:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),<15>}),} 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),17:(cons 39:(let 5:m, {15:(var 0:linkee,),15:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),<15>}),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}), 39:(let 5:m, {15:(var 0:linkee,),15:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),14:(let 4:ctxt, {14:(lam 5:m, 13:(cons {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),<14>} 4:ctxt,),} {15:(var 0:linkee,),<15>}),} {12:(samp 11:(app 6:(var 5:m,), 10:(app 8:(samp 7:(var 2:Σ.KeyGen,),), 9:(var 3:Σ.Enc,),),),),12:(samp 22:(var 1:Σ.C,),),}),),}),),),),
+
+Explanation: (lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (let ctxt (lam m (cons (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) (app ctxt (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (Rewrite=> let-app (app (let ctxt (lam m (cons (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) ctxt) (let ctxt (lam m (cons (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) (var linkee))))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (cons (Rewrite=> ots$ (samp (var Σ.C))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) ctxt) (let ctxt (lam m (cons (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (cons (samp (var Σ.C)) (Rewrite=> ots$ (samp (var Σ.C))))) ctxt) (let ctxt (lam m (cons (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (cons (samp (var Σ.C)) (samp (var Σ.C)))) ctxt) (let ctxt (lam m (cons (Rewrite=> ots$ (samp (var Σ.C))) (samp (app (var m) (app (samp (var Σ.KeyGen)) (var Σ.Enc)))))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (app (let ctxt (lam m (cons (samp (var Σ.C)) (samp (var Σ.C)))) ctxt) (let ctxt (lam m (cons (samp (var Σ.C)) (Rewrite=> ots$ (samp (var Σ.C))))) (var linkee)))))))
+(lam linkee (lam Σ.C (lam Σ.KeyGen (lam Σ.Enc (Rewrite<= let-app (let ctxt (lam m (cons (samp (var Σ.C)) (samp (var Σ.C)))) (app ctxt (var linkee))))))))
